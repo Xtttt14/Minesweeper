@@ -89,6 +89,56 @@ class BestTimesDialog(QDialog):
             self.table.setItem(i, 0, QTableWidgetItem(diff))
             self.table.setItem(i, 1, QTableWidgetItem(str(time_val)))
 
+
+class DifficultySelectDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Select Difficulty")
+        self.setModal(True)
+        self.setFixedSize(360, 360)
+        self.selected_difficulty = None
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(14)
+
+        options = [
+            ("Random", "Random"),
+            ("Easy", "9x9"),
+            ("Medium", "16x16"),
+            ("Hard", "16x30"),
+        ]
+
+        for label, subtitle in options:
+            button = QPushButton(f"{label}\n{subtitle}" if subtitle != label else label)
+            button.setFixedHeight(66)
+            button.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            button.clicked.connect(lambda _, value=label: self.choose_difficulty(value))
+            button.setStyleSheet("""
+                QPushButton {
+                    background-color: #c0c0c0;
+                    color: #000000;
+                    border-top: 3px solid #ffffff;
+                    border-left: 3px solid #ffffff;
+                    border-right: 3px solid #7b7b7b;
+                    border-bottom: 3px solid #7b7b7b;
+                    text-align: center;
+                }
+                QPushButton:pressed {
+                    border-top: 3px solid #7b7b7b;
+                    border-left: 3px solid #7b7b7b;
+                    border-right: 3px solid #ffffff;
+                    border-bottom: 3px solid #ffffff;
+                }
+            """)
+            layout.addWidget(button)
+
+        self.setStyleSheet("QDialog { background-color: #c0c0c0; }")
+
+    def choose_difficulty(self, difficulty):
+        self.selected_difficulty = difficulty
+        self.accept()
+
 class MinesweeperWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -101,6 +151,7 @@ class MinesweeperWindow(QMainWindow):
         }
         
         self.current_difficulty = "Easy"
+        self.last_difficulty = None
         self.rows = 9
         self.cols = 9
         self.total_mines = 10
@@ -119,7 +170,6 @@ class MinesweeperWindow(QMainWindow):
         self.timer.timeout.connect(self.update_timer)
         
         self.init_ui()
-        self.start_game("Easy")
 
     def init_ui(self):
         central_widget = QWidget()
@@ -191,9 +241,11 @@ class MinesweeperWindow(QMainWindow):
         game_menu = menubar.addMenu("Game")
         
         new_game_menu = game_menu.addMenu("New Game")
+        new_game_menu.addAction("Random", self.start_random_game)
         new_game_menu.addAction("Easy", lambda: self.start_game("Easy"))
         new_game_menu.addAction("Medium", lambda: self.start_game("Medium"))
         new_game_menu.addAction("Hard", lambda: self.start_game("Hard"))
+        game_menu.addAction("Select Difficulty", self.show_difficulty_dialog)
         
         game_menu.addSeparator()
         game_menu.addAction("Best Times", self.show_best_times)
@@ -227,14 +279,29 @@ class MinesweeperWindow(QMainWindow):
         self.setMinimumSize(280, 360)
 
     def start_game(self, difficulty):
+        difficulty_changed = difficulty != self.current_difficulty
         self.current_difficulty = difficulty
         settings = self.DIFFICULTY[difficulty]
         self.rows = settings["rows"]
         self.cols = settings["cols"]
         self.total_mines = settings["mines"]
-        self.reset_game()
+        self.reset_game(resize_window=difficulty_changed or self.last_difficulty is None)
+        self.last_difficulty = difficulty
 
-    def reset_game(self):
+    def start_random_game(self):
+        self.start_game(random.choice(list(self.DIFFICULTY.keys())))
+
+    def show_difficulty_dialog(self):
+        dialog = DifficultySelectDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.selected_difficulty:
+            if dialog.selected_difficulty == "Random":
+                self.start_random_game()
+            else:
+                self.start_game(dialog.selected_difficulty)
+            return True
+        return False
+
+    def reset_game(self, resize_window=False):
         self.game_over = False
         self.first_click = True
         self.flags = 0
@@ -251,9 +318,9 @@ class MinesweeperWindow(QMainWindow):
         self.cell_states = [[{'revealed': False, 'flagged': False} 
                              for _ in range(self.cols)] for _ in range(self.rows)]
         
-        self.create_grid_ui()
+        self.create_grid_ui(resize_window=resize_window)
 
-    def create_grid_ui(self):
+    def create_grid_ui(self, resize_window=False):
         # Efficiently remove old buttons
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
@@ -282,7 +349,8 @@ class MinesweeperWindow(QMainWindow):
         for c in range(self.cols):
             self.grid_layout.setColumnStretch(c, 1)
 
-        self.resize_for_current_difficulty()
+        if resize_window:
+            self.resize_for_current_difficulty()
         self.update_board_geometry()
 
     def place_mines(self, first_r, first_c):
@@ -574,8 +642,19 @@ def main():
     app = QApplication(sys.argv)
     font = QFont("Segoe UI", 10)
     app.setFont(font)
+    dialog = DifficultySelectDialog()
+    if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selected_difficulty:
+        sys.exit(0)
+
+    selected_difficulty = dialog.selected_difficulty
+    if selected_difficulty == "Random":
+        selected_difficulty = random.choice(["Easy", "Medium", "Hard"])
+
     window = MinesweeperWindow()
     window.show()
+    app.processEvents()
+    window.start_game(selected_difficulty)
+    app.processEvents()
     sys.exit(app.exec())
 
 if __name__ == "__main__":
