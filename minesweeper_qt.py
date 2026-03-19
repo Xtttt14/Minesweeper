@@ -2,9 +2,9 @@ import sys
 import json
 import random
 import time
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, 
-                             QPushButton, QLabel, QVBoxLayout, QHBoxLayout, 
-                             QMessageBox, QDialog, QTableWidget, 
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout,
+                             QPushButton, QLabel, QVBoxLayout, QHBoxLayout,
+                             QMessageBox, QDialog, QTableWidget,
                              QTableWidgetItem, QHeaderView, QSizePolicy)
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
@@ -22,7 +22,7 @@ class MinesweeperButton(QPushButton):
         self.c = c
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.setMinimumSize(30, 30) 
+        self.setMinimumSize(16, 16)
         self.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
         self.is_revealed = False
 
@@ -36,6 +36,25 @@ class MinesweeperButton(QPushButton):
                 super().mousePressEvent(event)
         else:
             super().mousePressEvent(event)
+
+
+class DigitalLabel(QLabel):
+    def __init__(self, text="000", parent=None):
+        super().__init__(text, parent)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedSize(78, 42)
+        self.setFont(QFont("Consolas", 26, QFont.Weight.Bold))
+        self.setStyleSheet("""
+            QLabel {
+                background-color: #111111;
+                color: #ff2a2a;
+                border-top: 2px solid #808080;
+                border-left: 2px solid #808080;
+                border-right: 2px solid #ffffff;
+                border-bottom: 2px solid #ffffff;
+                padding: 0px 4px 2px 4px;
+            }
+        """)
 
 class BestTimesDialog(QDialog):
     def __init__(self, parent=None):
@@ -94,7 +113,8 @@ class MinesweeperWindow(QMainWindow):
         self.game_over = False
         self.first_click = True
         self.timer_running = False
-        
+        self.auto_resizing = False
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.update_timer)
         
@@ -105,47 +125,66 @@ class MinesweeperWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         self.main_layout = QVBoxLayout(central_widget)
-        
+        self.main_layout.setContentsMargins(10, 10, 10, 10)
+        self.main_layout.setSpacing(8)
+
         # Header
-        header_layout = QHBoxLayout()
-        
-        self.mine_label = QLabel("💣 000")
-        self.mine_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        self.mine_label.setStyleSheet("color: #d9534f;") 
-        
-        self.reset_btn = QPushButton("😊")
+        self.header_panel = QWidget()
+        self.header_panel.setObjectName("headerPanel")
+        header_layout = QHBoxLayout(self.header_panel)
+        header_layout.setContentsMargins(12, 10, 12, 10)
+        header_layout.setSpacing(10)
+
+        self.mine_label = DigitalLabel("010")
+
+        self.reset_btn = QPushButton(":)")
         self.reset_btn.setFixedSize(40, 40)
-        self.reset_btn.setFont(QFont("Segoe UI", 20))
+        self.reset_btn.setFont(QFont("Consolas", 15, QFont.Weight.Bold))
         self.reset_btn.clicked.connect(lambda: self.start_game(self.current_difficulty))
         self.reset_btn.setStyleSheet("""
             QPushButton {
-                background-color: #f0f0f0;
-                border: 2px solid #ccc;
-                border-radius: 5px;
+                background-color: #c0c0c0;
+                color: #000000;
+                border-top: 3px solid #ffffff;
+                border-left: 3px solid #ffffff;
+                border-right: 3px solid #7b7b7b;
+                border-bottom: 3px solid #7b7b7b;
+                padding: 0px;
+                text-align: center;
             }
-            QPushButton:hover {
-                background-color: #e0e0e0;
+            QPushButton:pressed {
+                border-top: 3px solid #7b7b7b;
+                border-left: 3px solid #7b7b7b;
+                border-right: 3px solid #ffffff;
+                border-bottom: 3px solid #ffffff;
+                padding-left: 2px;
+                padding-top: 2px;
             }
         """)
-        
-        self.timer_label = QLabel("⏱️ 000")
-        self.timer_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
-        self.timer_label.setStyleSheet("color: #5bc0de;") 
-        
+
+        self.timer_label = DigitalLabel("000")
+
         header_layout.addWidget(self.mine_label)
         header_layout.addStretch()
         header_layout.addWidget(self.reset_btn)
         header_layout.addStretch()
         header_layout.addWidget(self.timer_label)
-        
-        self.main_layout.addLayout(header_layout)
-        
+
+        self.main_layout.addWidget(self.header_panel)
+
         # Grid
+        self.board_panel = QWidget()
+        self.board_panel.setObjectName("boardPanel")
+        self.board_layout = QVBoxLayout(self.board_panel)
+        self.board_layout.setContentsMargins(6, 6, 6, 6)
+        self.board_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout(self.grid_widget)
-        self.grid_layout.setSpacing(1)
+        self.grid_layout.setSpacing(0)
         self.grid_layout.setContentsMargins(0, 0, 0, 0)
-        self.main_layout.addWidget(self.grid_widget)
+        self.board_layout.addWidget(self.grid_widget, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.main_layout.addWidget(self.board_panel, 1)
         
         # Menu
         menubar = self.menuBar()
@@ -160,12 +199,32 @@ class MinesweeperWindow(QMainWindow):
         game_menu.addAction("Best Times", self.show_best_times)
         game_menu.addSeparator()
         game_menu.addAction("Exit", self.close)
-        
+
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #f8f9fa;
+                background-color: #c0c0c0;
+            }
+            QWidget {
+                background-color: #c0c0c0;
+            }
+            QWidget#headerPanel, QWidget#boardPanel {
+                border-top: 3px solid #7b7b7b;
+                border-left: 3px solid #7b7b7b;
+                border-right: 3px solid #ffffff;
+                border-bottom: 3px solid #ffffff;
+            }
+            QMenuBar {
+                background-color: #c0c0c0;
+            }
+            QMenuBar::item:selected, QMenu::item:selected {
+                background-color: #0a246a;
+                color: white;
+            }
+            QMenu {
+                background-color: #c0c0c0;
             }
         """)
+        self.setMinimumSize(280, 360)
 
     def start_game(self, difficulty):
         self.current_difficulty = difficulty
@@ -184,9 +243,9 @@ class MinesweeperWindow(QMainWindow):
         self.timer_running = False
         self.timer.stop()
         
-        self.timer_label.setText("⏱️ 000")
-        self.mine_label.setText(f"💣 {self.total_mines}")
-        self.reset_btn.setText("😊")
+        self.timer_label.setText("000")
+        self.mine_label.setText(f"{self.total_mines:03d}")
+        self.reset_btn.setText(":)")
         
         self.grid = [[0 for _ in range(self.cols)] for _ in range(self.rows)]
         self.cell_states = [[{'revealed': False, 'flagged': False} 
@@ -211,22 +270,20 @@ class MinesweeperWindow(QMainWindow):
                 btn.right_clicked.connect(lambda r=r, c=c: self.on_right_click(r, c))
                 btn.chord_clicked.connect(lambda r=r, c=c: self.attempt_chord(r, c))
                 
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e9ecef;
-                        border: 1px solid #adb5bd;
-                        border-radius: 2px;
-                    }
-                    QPushButton:hover {
-                        background-color: #dee2e6;
-                    }
-                """)
+                btn.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+                btn.setStyleSheet(self.get_hidden_cell_style())
                 
                 self.grid_layout.addWidget(btn, r, c)
                 row_buttons.append(btn)
             self.buttons.append(row_buttons)
-            
-        self.adjustSize()
+
+        for r in range(self.rows):
+            self.grid_layout.setRowStretch(r, 1)
+        for c in range(self.cols):
+            self.grid_layout.setColumnStretch(c, 1)
+
+        self.resize_for_current_difficulty()
+        self.update_board_geometry()
 
     def place_mines(self, first_r, first_c):
         mines_placed = 0
@@ -281,31 +338,15 @@ class MinesweeperWindow(QMainWindow):
             self.cell_states[r][c]['flagged'] = False
             self.flags -= 1
             btn.setText("")
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: #e9ecef;
-                    border: 1px solid #adb5bd;
-                    border-radius: 2px;
-                }
-                QPushButton:hover {
-                    background-color: #dee2e6;
-                }
-            """)
+            btn.setStyleSheet(self.get_hidden_cell_style())
         else:
             if self.flags < self.total_mines:
                 self.cell_states[r][c]['flagged'] = True
                 self.flags += 1
-                btn.setText("🚩")
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #e9ecef;
-                        border: 1px solid #adb5bd;
-                        color: #f0ad4e;
-                        font-size: 14px;
-                    }
-                """)
-        
-        self.mine_label.setText(f"💣 {self.total_mines - self.flags}")
+                btn.setText("P")
+                btn.setStyleSheet(self.get_hidden_cell_style("#cc0000"))
+
+        self.mine_label.setText(f"{max(self.total_mines - self.flags, 0):03d}")
 
     def attempt_chord(self, r, c):
         if not self.cell_states[r][c]['revealed']:
@@ -346,33 +387,24 @@ class MinesweeperWindow(QMainWindow):
         
         text = ""
         style_color = "black"
-        bg_color = "#f8f9fa" 
-        
+
         if val == -1:
-            text = "💣"
-            bg_color = "#d9534f"
-            btn.setStyleSheet(f"background-color: {bg_color}; border: 1px solid #ccc; color: white;")
+            text = "*"
+            btn.setStyleSheet(self.get_revealed_cell_style("#000000", "#ff0000"))
             btn.setText(text)
             self.game_over_loss()
             return
         elif val == 0:
             text = ""
-            btn.setStyleSheet(f"background-color: {bg_color}; border: 1px solid #eee;")
+            btn.setStyleSheet(self.get_revealed_cell_style())
         else:
             text = str(val)
             colors = {
-                1: "blue", 2: "green", 3: "red", 4: "darkblue", 
-                5: "brown", 6: "cyan", 7: "black", 8: "gray"
+                1: "#0000ff", 2: "#008000", 3: "#ff0000", 4: "#000080",
+                5: "#800000", 6: "#008080", 7: "#000000", 8: "#808080"
             }
             style_color = colors.get(val, "black")
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {bg_color};
-                    border: 1px solid #eee;
-                    color: {style_color};
-                    font-weight: bold;
-                }}
-            """)
+            btn.setStyleSheet(self.get_revealed_cell_style(style_color))
             
         btn.setText(text)
         # Note: We do NOT disable the button, so it can still receive clicks for chording
@@ -385,8 +417,8 @@ class MinesweeperWindow(QMainWindow):
 
     def update_timer(self):
         if self.timer_running and not self.game_over:
-            elapsed = int(time.time() - self.start_time)
-            self.timer_label.setText(f"⏱️ {elapsed:03d}")
+            elapsed = self.get_elapsed_seconds()
+            self.timer_label.setText(f"{min(elapsed, 999):03d}")
 
     def check_win(self):
         if self.game_over: return
@@ -403,25 +435,26 @@ class MinesweeperWindow(QMainWindow):
     def game_over_loss(self):
         self.game_over = True
         self.timer.stop()
-        self.reset_btn.setText("😵")
+        self.reset_btn.setText("X(")
         
         for r in range(self.rows):
             for c in range(self.cols):
                 if self.grid[r][c] == -1 and not self.cell_states[r][c]['revealed']:
                      self.cell_states[r][c]['revealed'] = True
                      btn = self.buttons[r][c]
-                     btn.setText("💣")
-                     btn.setStyleSheet("background-color: #d9534f; color: white; border: 1px solid #ccc;")
-                     
-        QMessageBox.information(self, "Game Over", "You hit a mine! 💥")
+                     btn.setText("*")
+                     btn.setStyleSheet(self.get_revealed_cell_style("#000000"))
+
+        QMessageBox.information(self, "Game Over", "You hit a mine!")
 
     def game_over_win(self):
         self.game_over = True
         self.timer.stop()
-        self.reset_btn.setText("😎")
-        elapsed = int(time.time() - self.start_time)
+        self.reset_btn.setText("B)")
+        elapsed = self.get_elapsed_seconds()
+        self.timer_label.setText(f"{min(elapsed, 999):03d}")
         self.save_best_time(elapsed)
-        QMessageBox.information(self, "Congratulations!", f"You won in {elapsed} seconds! 🎉")
+        QMessageBox.information(self, "Congratulations!", f"You won in {elapsed} seconds!")
 
     def save_best_time(self, elapsed):
         filename = "best_times.json"
@@ -430,9 +463,13 @@ class MinesweeperWindow(QMainWindow):
                 data = json.load(f)
         except (FileNotFoundError, json.JSONDecodeError):
             data = {}
-            
+
         difficulty = self.current_difficulty
-        if difficulty not in data or elapsed < data[difficulty]:
+        current_best = data.get(difficulty)
+        if not isinstance(current_best, int) or current_best <= 0:
+            current_best = None
+
+        if current_best is None or elapsed < current_best:
             data[difficulty] = elapsed
             with open(filename, 'w') as f:
                 json.dump(data, f)
@@ -440,6 +477,98 @@ class MinesweeperWindow(QMainWindow):
     def show_best_times(self):
         dialog = BestTimesDialog(self)
         dialog.exec()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.update_board_geometry()
+
+    def resize_for_current_difficulty(self):
+        target_cell_sizes = {
+            "Easy": 42,
+            "Medium": 30,
+            "Hard": 24
+        }
+        cell_size = target_cell_sizes.get(self.current_difficulty, 30)
+
+        board_width = self.cols * cell_size
+        board_height = self.rows * cell_size
+        self.grid_widget.setMinimumSize(board_width, board_height)
+        self.board_panel.setMinimumSize(board_width + 20, board_height + 20)
+        self.centralWidget().adjustSize()
+
+        size_hint = self.sizeHint()
+        target_width = max(board_width + 52, size_hint.width())
+        target_height = max(board_height + 172, size_hint.height())
+
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            target_width = min(target_width, int(available.width() * 0.9))
+            target_height = min(target_height, int(available.height() * 0.9))
+
+        self.auto_resizing = True
+        self.resize(max(target_width, 320), max(target_height, 420))
+        self.auto_resizing = False
+
+    def update_board_geometry(self):
+        if not self.buttons:
+            return
+
+        margins = self.board_layout.contentsMargins()
+        board_width = max(0, self.board_panel.width() - margins.left() - margins.right() - 10)
+        board_height = max(0, self.board_panel.height() - margins.top() - margins.bottom() - 10)
+        if board_width <= 0 or board_height <= 0:
+            return
+
+        cell_size = max(16, min(board_width // self.cols, board_height // self.rows))
+        grid_width = cell_size * self.cols
+        grid_height = cell_size * self.rows
+        self.grid_widget.setFixedSize(grid_width, grid_height)
+
+        font_size = max(9, min(20, int(cell_size * 0.45)))
+        for row in self.buttons:
+            for btn in row:
+                btn.setMinimumSize(cell_size, cell_size)
+                btn.setMaximumSize(cell_size, cell_size)
+                btn.setFont(QFont("Arial", font_size, QFont.Weight.Bold))
+
+    def get_elapsed_seconds(self):
+        if self.start_time is None:
+            return 0
+        return max(1, int(time.time() - self.start_time))
+
+    def get_hidden_cell_style(self, text_color="#000000"):
+        return f"""
+            QPushButton {{
+                background-color: #c0c0c0;
+                color: {text_color};
+                border-top: 3px solid #ffffff;
+                border-left: 3px solid #ffffff;
+                border-right: 3px solid #7b7b7b;
+                border-bottom: 3px solid #7b7b7b;
+                padding: 0px;
+            }}
+            QPushButton:pressed {{
+                border-top: 3px solid #7b7b7b;
+                border-left: 3px solid #7b7b7b;
+                border-right: 3px solid #ffffff;
+                border-bottom: 3px solid #ffffff;
+            }}
+        """
+
+    def get_revealed_cell_style(self, text_color="#000000", bg_color="#c0c0c0"):
+        return f"""
+            QPushButton {{
+                background-color: {bg_color};
+                color: {text_color};
+                border-top: 1px solid #7b7b7b;
+                border-left: 1px solid #7b7b7b;
+                border-right: 1px solid #f2f2f2;
+                border-bottom: 1px solid #f2f2f2;
+                padding: 0px;
+                font-weight: bold;
+            }}
+        """
 
 def main():
     app = QApplication(sys.argv)
